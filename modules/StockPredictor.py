@@ -124,7 +124,7 @@ class StockPredictor:
             # 如果出现错误，返回一个很大的损失值
             return float('inf')
 
-    def optimize_hyperparameters(self, lookback_days=30):
+    def optimize_hyperparameters(self, lookback_days, n_particles, n_iterations):
         """使用PSO优化超参数"""
         print("准备PSO优化数据...")
 
@@ -148,7 +148,7 @@ class StockPredictor:
         ]
 
         # 创建PSO优化器
-        pso = PSOOptimizer(n_particles=4, n_iterations=4)
+        pso = PSOOptimizer(n_particles, n_iterations)
 
         # 运行优化
         best_params, best_fitness, convergence_curve = pso.optimize(
@@ -301,7 +301,7 @@ def main(file_path):
     print(data[['开盘Open', '最高High', '最低Low', '收盘Close']].describe())
 
     # 2. 使用PSO优化超参数
-    best_params = predictor.optimize_hyperparameters(lookback_days=30)
+    best_params = predictor.optimize_hyperparameters(30, 4, 4)
 
     # 3. 使用优化后的参数训练最终模型
     X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
