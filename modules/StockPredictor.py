@@ -1,3 +1,4 @@
+# StockPredictor.py (修改版)
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,6 +11,7 @@ from tensorflow.keras.optimizers import Adam
 import warnings
 
 from modules.PSOOptimizer import PSOOptimizer
+from modules.SignalDecomposer import SignalDecomposer  # 新增导入
 
 warnings.filterwarnings('ignore')
 
@@ -21,12 +23,17 @@ plt.rcParams['axes.unicode_minus'] = False
 np.random.seed(42)
 tf.random.set_seed(42)
 
+
 class StockPredictor:
-    def __init__(self):
+    def __init__(self, use_decomposition=False, decomposition_method='ceemdan'):
         self.data = None
         self.scaler = MinMaxScaler()
         self.model = None
         self.best_params = None
+        self.use_decomposition = use_decomposition
+        self.decomposition_method = decomposition_method
+        self.decomposer = SignalDecomposer() if use_decomposition else None
+        self.imfs = None
 
     def load_data_from_csv(self, file_path):
         """从CSV文件加载数据"""
@@ -43,10 +50,51 @@ class StockPredictor:
 
         return self.data
 
-    def create_dataset(self, lookback_days=60):
+    def apply_decomposition(self):
+        """应用信号分解"""
+        if not self.use_decomposition:
+            print("未启用信号分解")
+            return None
+
+        print(f"\n开始{self.decomposition_method.upper()}信号分解...")
+
+        # 使用收盘价进行分解
+        prices = self.data['收盘Close'].values
+
+        # 进行信号分解
+        self.imfs = self.decomposer.decompose(prices, method=self.decomposition_method)
+
+        # 绘制分解结果
+        self.decomposer.plot_decomposition(prices)
+
+        # 显示IMF特征
+        features = self.decomposer.get_imf_features()
+        print("\nIMF分量特征:")
+        for feature in features:
+            print(f"IMF{feature['imf_index']}: 均值={feature['mean']:.4f}, "
+                  f"标准差={feature['std']:.4f}, 能量={feature['energy']:.4f}")
+
+        return self.imfs
+
+    def create_dataset(self, lookback_days=60, selected_imfs=None):
         """创建时间序列数据集"""
         # 使用收盘价
         prices = self.data['收盘Close'].values.reshape(-1, 1)
+
+        if self.use_decomposition and self.imfs is not None:
+            print("使用分解后的信号分量进行预测...")
+
+            if selected_imfs is None:
+                # 默认使用所有高频IMF分量（排除残差）
+                selected_imfs = list(range(len(self.imfs) - 1))
+
+            # 重构选定的IMF分量
+            reconstructed = self.decomposer.reconstruct_signal(
+                start_imf=min(selected_imfs),
+                end_imf=max(selected_imfs) + 1
+            )
+            prices = reconstructed.reshape(-1, 1)
+            print(f"使用IMF分量 {selected_imfs} 进行预测")
 
         # 归一化
         scaled_prices = self.scaler.fit_transform(prices)
@@ -93,7 +141,6 @@ class StockPredictor:
 
     def objective_function(self, params):
         """PSO的目标函数 - 返回验证集上的损失"""
-        # 参数解码
         lookback_days = 30  # 固定时间步长
 
         try:
@@ -121,7 +168,7 @@ class StockPredictor:
             return history.history['val_loss'][-1]
 
         except Exception as e:
-            # 如果出现错误，返回一个很大的损失值
+            print(f"PSO目标函数错误: {e}")
             return float('inf')
 
     def optimize_hyperparameters(self, lookback_days, n_particles, n_iterations):
@@ -139,7 +186,6 @@ class StockPredictor:
         self.y_val_quick = y_train[-val_size:]
 
         # 定义参数边界
-        # [lstm_units1, lstm_units2, dropout_rate, learning_rate]
         bounds = [
             (20, 100),  # 第一层LSTM单元数
             (10, 50),  # 第二层LSTM单元数
@@ -191,14 +237,17 @@ class StockPredictor:
         print("最终模型结构:")
         self.model.summary()
 
+        custom_logger = CustomLoggingCallback(log_interval=10)  # 每10个epoch输出一次
+
         # 训练模型
         history = self.model.fit(
             X_train, y_train,
             batch_size=32,
             epochs=epochs,
             validation_split=0.2,
-            verbose=1,
+            verbose=0,
             callbacks=[
+                custom_logger,
                 tf.keras.callbacks.EarlyStopping(
                     patience=15,
                     restore_best_weights=True
@@ -216,6 +265,7 @@ class StockPredictor:
         plt.ylabel('损失')
         plt.legend()
         plt.grid(True)
+        plt.show()
 
         return X_test, y_test, history
 
@@ -242,15 +292,20 @@ class StockPredictor:
 
         return y_test_actual, y_pred_actual, {'MSE': mse, 'RMSE': rmse, 'MAE': mae, 'R2': r2}
 
-    def plot_results(self, y_true, y_pred, dates):
-        """绘制结果"""
-        plt.figure(figsize=(15, 10))
+    def plot_comprehensive_results(self, y_true, y_pred, dates):
+        """绘制综合结果"""
+        fig = plt.figure(figsize=(18, 12))
 
         # 子图1: 预测结果对比
-        plt.subplot(2, 2, 1)
+        plt.subplot(2, 3, 1)
         plt.plot(dates, y_true, label='真实指数', color='blue', alpha=0.7, linewidth=2)
         plt.plot(dates, y_pred, label='预测指数', color='red', alpha=0.7, linewidth=2)
-        plt.title('中证流通指数预测结果 (PSO优化后)')
+        title = '中证流通指数预测结果'
+        if self.use_decomposition:
+            title += f' ({self.decomposition_method.upper()}+PSO+LSTM)'
+        else:
+            title += ' (PSO+LSTM)'
+        plt.title(title)
         plt.xlabel('时间')
         plt.ylabel('指数值')
         plt.legend()
@@ -258,7 +313,7 @@ class StockPredictor:
         plt.xticks(rotation=45)
 
         # 子图2: 预测误差
-        plt.subplot(2, 2, 2)
+        plt.subplot(2, 3, 2)
         errors = y_true.flatten() - y_pred.flatten()
         plt.plot(dates, errors, color='green', alpha=0.7)
         plt.title('预测误差')
@@ -268,7 +323,7 @@ class StockPredictor:
         plt.xticks(rotation=45)
 
         # 子图3: 散点图
-        plt.subplot(2, 2, 3)
+        plt.subplot(2, 3, 3)
         plt.scatter(y_true, y_pred, alpha=0.6)
         plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
         plt.xlabel('真实值')
@@ -277,21 +332,117 @@ class StockPredictor:
         plt.grid(True)
 
         # 子图4: 误差分布直方图
-        plt.subplot(2, 2, 4)
+        plt.subplot(2, 3, 4)
         plt.hist(errors, bins=30, alpha=0.7, color='orange', edgecolor='black')
         plt.title('预测误差分布')
         plt.xlabel('误差值')
         plt.ylabel('频次')
         plt.grid(True)
 
+        # 子图5: 累积误差
+        plt.subplot(2, 3, 5)
+        cumulative_errors = np.cumsum(np.abs(errors))
+        plt.plot(dates, cumulative_errors, color='purple')
+        plt.title('累积绝对误差')
+        plt.xlabel('时间')
+        plt.ylabel('累积误差')
+        plt.grid(True)
+        plt.xticks(rotation=45)
+
+        # 子图6: 相对误差百分比
+        plt.subplot(2, 3, 6)
+        relative_errors = (errors / y_true.flatten()) * 100
+        plt.plot(dates, relative_errors, color='brown')
+        plt.title('相对误差百分比')
+        plt.xlabel('时间')
+        plt.ylabel('相对误差(%)')
+        plt.grid(True)
+        plt.xticks(rotation=45)
+
         plt.tight_layout()
         plt.show()
 
+class CustomLoggingCallback(tf.keras.callbacks.Callback):
+    def __init__(self, log_interval=10):
+        super().__init__()
+        self.log_interval = log_interval
+
+    def on_epoch_end(self, epoch, logs=None):
+        if (epoch + 1) % self.log_interval == 0:
+            print(f"Epoch {epoch + 1}: loss={logs['loss']:.4f}, val_loss={logs['val_loss']:.4f}")
+
+# 综合比较函数
+def comprehensive_comparison(file_path):
+    """综合比较不同方法的性能"""
+
+    methods = [
+        {'name': 'LSTM', 'use_decomp': False, 'method': None},
+        {'name': 'EMD+LSTM', 'use_decomp': True, 'method': 'emd'},
+        {'name': 'EEMD+LSTM', 'use_decomp': True, 'method': 'eemd'},
+        {'name': 'CEEMDAN+LSTM', 'use_decomp': True, 'method': 'ceemdan'},
+    ]
+
+    results = {}
+
+    for method_config in methods:
+        print(f"\n{'=' * 60}")
+        print(f"正在测试: {method_config['name']}")
+        print(f"{'=' * 60}")
+
+        # 创建预测器
+        predictor = StockPredictor(
+            use_decomposition=method_config['use_decomp'],
+            decomposition_method=method_config['method']
+        )
+
+        # 加载数据
+        data = predictor.load_data_from_csv(file_path)
+
+        # 应用分解（如果启用）
+        if method_config['use_decomp']:
+            predictor.apply_decomposition()
+
+        # 优化参数
+        best_params = predictor.optimize_hyperparameters(30, 4, 4)
+
+        # 训练模型
+        X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
+
+        # 评估模型
+        y_test_actual, y_pred_actual, metrics = predictor.evaluate_model(X_test, y_test)
+
+        # 保存结果
+        results[method_config['name']] = {
+            'metrics': metrics,
+            'predictions': y_pred_actual,
+            'actual': y_test_actual
+        }
+
+        # 可视化结果
+        test_dates = data.index[-len(y_test_actual):]
+        predictor.plot_comprehensive_results(y_test_actual, y_pred_actual, test_dates)
+
+    # 对比所有方法
+    print(f"\n{'=' * 80}")
+    print("所有方法性能对比")
+    print(f"{'=' * 80}")
+    print(f"{'方法':<15} {'MSE':<12} {'RMSE':<12} {'MAE':<12} {'R²':<12}")
+    print(f"{'-' * 80}")
+
+    for method_name, result in results.items():
+        m = result['metrics']
+        print(f"{method_name:<15} {m['MSE']:<12.6f} {m['RMSE']:<12.6f} {m['MAE']:<12.6f} {m['R2']:<12.6f}")
+
+    return results
+
 
 # 主程序
-def main(file_path):
+def main(file_path, use_decomposition=True, decomposition_method='ceemdan'):
     # 创建预测器
-    predictor = StockPredictor()
+    predictor = StockPredictor(
+        use_decomposition=use_decomposition,
+        decomposition_method=decomposition_method
+    )
 
     # 1. 从CSV文件加载数据
     data = predictor.load_data_from_csv(file_path)
@@ -300,80 +451,35 @@ def main(file_path):
     print("\n数据基本信息:")
     print(data[['开盘Open', '最高High', '最低Low', '收盘Close']].describe())
 
-    # 2. 使用PSO优化超参数
-    best_params = predictor.optimize_hyperparameters(30, 4, 4)
+    # 2. 应用信号分解（如果启用）
+    if use_decomposition:
+        predictor.apply_decomposition()
 
-    # 3. 使用优化后的参数训练最终模型
+    # 3. 使用PSO优化超参数
+    best_params = predictor.optimize_hyperparameters(30, 2, 2)
+
+    # 4. 使用优化后的参数训练最终模型
     X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
 
-    # 4. 评估模型
+    # 5. 评估模型
     y_test_actual, y_pred_actual, metrics = predictor.evaluate_model(X_test, y_test)
 
-    # 5. 可视化结果
+    # 6. 可视化结果
     test_dates = data.index[-len(y_test_actual):]
-    predictor.plot_results(y_test_actual, y_pred_actual, test_dates)
+    predictor.plot_comprehensive_results(y_test_actual, y_pred_actual, test_dates)
 
     return predictor, metrics, data, best_params
 
 
-# 与基准模型对比
-def baseline_comparison(data, best_params):
-    """与基准模型对比"""
-    # 简单LSTM基准（不使用PSO优化）
-    print("\n训练基准LSTM模型进行比较...")
+if __name__ == "__main__":
+    file_path = "../data/000902perf.csv"
 
-    predictor_baseline = StockPredictor()
-    predictor_baseline.data = data
-
-    # 使用固定参数
-    fixed_params = [50, 25, 0.2, 0.001]  # 常用默认参数
-
-    X_train, X_test, y_train, y_test = predictor_baseline.create_dataset(30)
-    predictor_baseline.model = predictor_baseline.build_lstm_model(fixed_params, 30)
-
-    # 训练基准模型
-    predictor_baseline.model.fit(
-        X_train, y_train,
-        batch_size=32,
-        epochs=80,
-        validation_split=0.2,
-        verbose=0
+    # 方式1: 运行单个方法
+    predictor, metrics, data, best_params = main(
+        file_path,
+        use_decomposition=True,
+        decomposition_method='ceemdan'
     )
 
-    # 评估基准模型
-    _, _, baseline_metrics = predictor_baseline.evaluate_model(X_test, y_test)
-
-    # 对比结果
-    print("\n" + "=" * 60)
-    print("PSO优化 vs 基准LSTM 对比结果")
-    print("=" * 60)
-
-    # 重新计算PSO模型指标用于对比
-    predictor_pso = StockPredictor()
-    predictor_pso.data = data
-    predictor_pso.best_params = best_params
-    X_train, X_test, y_train, y_test = predictor_pso.create_dataset(30)
-    predictor_pso.model = predictor_pso.build_lstm_model(best_params, 30)
-    predictor_pso.model.fit(X_train, y_train, batch_size=32, epochs=80, validation_split=0.2, verbose=0)
-    _, _, pso_metrics = predictor_pso.evaluate_model(X_test, y_test)
-
-    print(f"{'指标':<10} {'PSO优化':<15} {'基准LSTM':<15} {'提升百分比':<15}")
-    print("-" * 60)
-    for metric in ['MSE', 'RMSE', 'MAE']:
-        pso_val = pso_metrics[metric]
-        base_val = baseline_metrics[metric]
-        improvement = ((base_val - pso_val) / base_val) * 100
-        print(f"{metric:<10} {pso_val:<15.6f} {base_val:<15.6f} {improvement:>10.2f}%")
-
-    r2_improvement = (pso_metrics['R2'] - baseline_metrics['R2']) * 100
-    print(f"{'R2':<10} {pso_metrics['R2']:<15.6f} {baseline_metrics['R2']:<15.6f} {r2_improvement:>10.2f}%")
-
-    return baseline_metrics
-
-
-if __name__ == "__main__":
-    # 运行PSO优化的LSTM模型
-    predictor, metrics, data, best_params = main("../data/000902perf.csv")
-
-    # 与基准模型对比
-    baseline_metrics = baseline_comparison(data, best_params)
+    # # 方式2: 运行综合比较（比较所有方法）
+    # results = comprehensive_comparison(file_path)
