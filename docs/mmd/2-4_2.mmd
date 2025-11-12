@@ -1,0 +1,78 @@
+---
+config:
+  layout: dagre
+---
+flowchart LR
+ subgraph A["数据输入层"]
+        A1["原始股票时间序列<br>开盘价/收盘价/成交量"]
+        A2["数据预处理<br>缺失值处理/归一化"]
+  end
+ subgraph B["CEEMDAN分解层"]
+        B1["CEEMDAN信号分解"]
+        B2["IMF分量提取"]
+        B3["分量特征分析"]
+        B4["分量选择与重构"]
+  end
+ subgraph C["PSO优化层"]
+        C1["粒子群初始化"]
+        C2["适应度函数计算"]
+        C3["个体与全局最优更新"]
+        C4["速度与位置更新"]
+        C5["收敛判断"]
+  end
+ subgraph D["LSTM预测层"]
+        D1["最优参数LSTM模型"]
+        D2["时间序列滑动窗口"]
+        D3["多层LSTM网络"]
+        D4["Dropout正则化"]
+        D5["全连接输出层"]
+  end
+ subgraph E["输出层"]
+        E1["预测结果反归一化"]
+        E2["性能指标计算"]
+        E3["结果可视化展示"]
+        E4["模型部署应用"]
+  end
+    A2 --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> C2
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 --> C5
+    C5 -- 未收敛 --> C2
+    C5 -- 收敛 --> D1
+    D1 --> D2
+    D2 --> D3
+    D3 --> D4
+    D4 --> D5
+    D5 --> E1
+    E1 --> E2 & E3
+    E2 --> E4
+     A1:::input
+     A2:::input
+     B1:::decomposition
+     B2:::decomposition
+     B3:::decomposition
+     B4:::decomposition
+     C1:::optimization
+     C2:::optimization
+     C3:::optimization
+     C4:::optimization
+     C5:::optimization
+     D1:::model
+     D2:::model
+     D3:::model
+     D4:::model
+     D5:::model
+     E1:::output
+     E2:::output
+     E3:::output
+     E4:::output
+    classDef input fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    classDef decomposition fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    classDef optimization fill:#ffecb3,stroke:#ff6f00,stroke-width:2px
+    classDef model fill:#f8bbd9,stroke:#880e4f,stroke-width:2px
+    classDef output fill:#b2ebf2,stroke:#006064,stroke-width:2px

@@ -1,0 +1,61 @@
+---
+config:
+  layout: dagre
+---
+flowchart LR
+    A["原始股票数据"] --> B["数据预处理"]
+    B --> C["CEEMDAN信号分解"]
+    C --> D["IMF1 高频分量"] & E["IMF2 中频分量"] & F["IMF3 低频分量"] & G["... 其他IMF分量"] & H["Residue 残差项"]
+    D --> I["分量选择与重构"]
+    E --> I
+    F --> I
+    G --> I
+    H --> I
+    I --> J["时间序列数据集构建"]
+    J --> K["LSTM预测模型"]
+    L["PSO粒子群优化"] --> M["超参数搜索空间"]
+    M --> N["LSTM单元数"] & O["Dropout率"] & P["学习率"] & Q["批处理大小"]
+    N --> K
+    O --> K
+    P --> K
+    Q --> K
+    K --> R["模型训练与验证"]
+    R --> S{"早停法判断"}
+    S -- 验证损失上升 --> T["停止训练"]
+    S -- 继续训练 --> R
+    T --> U["最优模型保存"]
+    U --> V["测试集预测"]
+    V --> W["预测结果反归一化"]
+    W --> X["性能评估"]
+    X --> Y["MSE/RMSE/MAE/R²"] & Z["预测结果可视化"]
+     A:::data
+     B:::data
+     C:::decomposition
+     D:::decomposition
+     E:::decomposition
+     F:::decomposition
+     G:::decomposition
+     H:::decomposition
+     J:::data
+     K:::model
+     L:::optimization
+     M:::optimization
+     N:::optimization
+     O:::optimization
+     P:::optimization
+     Q:::optimization
+     R:::model
+     S:::model
+     T:::model
+     U:::model
+     V:::output
+     W:::output
+     X:::output
+     Y:::output
+     Z:::output
+    classDef data fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef decomposition fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef optimization fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef model fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef output fill:#e0f2f1,stroke:#004d40,stroke-width:2px

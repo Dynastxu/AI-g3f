@@ -1,0 +1,42 @@
+---
+config:
+  layout: dagre
+---
+flowchart LR
+ subgraph 算法参数["算法参数"]
+        P1["粒子数量"]
+        P2["迭代次数"]
+        P3["惯性权重"]
+        P4["学习因子"]
+  end
+ subgraph 优化目标["优化目标"]
+        O1["LSTM超参数优化"]
+        O2["适应度函数: 验证集损失"]
+  end
+    A["开始"] --> B["初始化粒子群参数"]
+    B --> C["随机初始化粒子位置和速度"]
+    C --> D["计算每个粒子的适应度"]
+    D --> E["更新个体最优位置"]
+    E --> F["更新全局最优位置"]
+    F --> G{"是否满足终止条件?"}
+    G -- 是 --> H["输出最优解"]
+    G -- 否 --> I["更新粒子速度和位置"]
+    I --> J["边界处理"]
+    J --> D
+    H --> K["结束"]
+     A:::startEnd
+     B:::process
+     C:::process
+     D:::process
+     E:::process
+     F:::process
+     G:::decision
+     I:::process
+     J:::process
+     K:::startEnd
+    classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:1px
+    classDef decision fill:#fff3e0,stroke:#e65100,stroke-width:1px
+    classDef loop fill:#e8f5e8,stroke:#1b5e20,stroke-width:1px
+    style 算法参数 fill:#f5f5f5,stroke:#666,stroke-width:1px
+    style 优化目标 fill:#f5f5f5,stroke:#666,stroke-width:1px

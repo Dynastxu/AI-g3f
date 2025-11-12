@@ -171,7 +171,7 @@ class StockPredictor:
             print(f"PSO目标函数错误: {e}")
             return float('inf')
 
-    def optimize_hyperparameters(self, lookback_days, n_particles, n_iterations):
+    def optimize_hyperparameters(self, lookback_days, n_particles=4, n_iterations=4):
         """使用PSO优化超参数"""
         print("准备PSO优化数据...")
 
@@ -185,17 +185,16 @@ class StockPredictor:
         self.y_train_quick = y_train[:-val_size]
         self.y_val_quick = y_train[-val_size:]
 
-        # 定义参数边界
+        # 调整参数边界，可能之前边界不适合的数据
         bounds = [
-            (20, 100),  # 第一层LSTM单元数
-            (10, 50),  # 第二层LSTM单元数
-            (0.1, 0.5),  # Dropout率
-            (0.0001, 0.01)  # 学习率
+            (30, 150),  # 第一层LSTM单元数 - 扩大范围
+            (20, 80),  # 第二层LSTM单元数 - 扩大范围
+            (0.15, 0.4),  # Dropout率 - 缩小范围
+            (0.0005, 0.005)  # 学习率 - 缩小范围
         ]
 
         # 创建PSO优化器
-        pso = PSOOptimizer(n_particles, n_iterations)
-
+        pso = PSOOptimizer(n_particles, n_iterations, w=0.6, c1=1.7, c2=1.7)
         # 运行优化
         best_params, best_fitness, convergence_curve = pso.optimize(
             self.objective_function, bounds
@@ -362,6 +361,129 @@ class StockPredictor:
         plt.tight_layout()
         plt.show()
 
+    def run_baseline_model(self, model_type='single_lstm', lookback_days=30, epochs=100):
+        """运行基准模型进行对比"""
+        print(f"\n正在运行 {model_type} 基准模型...")
+
+        # 准备数据
+        if model_type in ['single_lstm', 'pso_lstm']:
+            # 不使用分解
+            X_train, X_test, y_train, y_test = self.create_dataset(lookback_days)
+        else:
+            # 使用分解
+            if self.imfs is None:
+                self.apply_decomposition()
+            X_train, X_test, y_train, y_test = self.create_dataset(lookback_days)
+
+        # 构建模型
+        if model_type == 'single_lstm':
+            # 单一LSTM，固定参数
+            params = [50, 25, 0.2, 0.001]
+            model = self.build_lstm_model(params, lookback_days)
+        elif model_type == 'pso_lstm':
+            # PSO优化的LSTM
+            if self.best_params is None:
+                self.optimize_hyperparameters(lookback_days)
+            model = self.build_lstm_model(self.best_params, lookback_days)
+        elif model_type == 'emd_lstm':
+            # EMD + LSTM
+            params = [50, 25, 0.2, 0.001]
+            model = self.build_lstm_model(params, lookback_days)
+        elif model_type == 'eemd_lstm':
+            # EEMD + LSTM
+            params = [50, 25, 0.2, 0.001]
+            model = self.build_lstm_model(params, lookback_days)
+        elif model_type == 'ceemdan_lstm':
+            # CEEMDAN + LSTM
+            params = [50, 25, 0.2, 0.001]
+            model = self.build_lstm_model(params, lookback_days)
+
+        # 训练模型
+        history = model.fit(
+            X_train, y_train,
+            batch_size=32,
+            epochs=epochs,
+            validation_split=0.2,
+            verbose=0,
+            callbacks=[
+                tf.keras.callbacks.EarlyStopping(
+                    patience=15,
+                    restore_best_weights=True
+                )
+            ]
+        )
+
+        # 预测和评估
+        y_pred = model.predict(X_test, verbose=0)
+        y_test_actual = self.scaler.inverse_transform(y_test.reshape(-1, 1))
+        y_pred_actual = self.scaler.inverse_transform(y_pred)
+
+        # 计算指标
+        mse = mean_squared_error(y_test_actual, y_pred_actual)
+        rmse = np.sqrt(mse)
+        mae = mean_absolute_error(y_test_actual, y_pred_actual)
+        r2 = r2_score(y_test_actual, y_pred_actual)
+
+        metrics = {
+            'MSE': mse,
+            'RMSE': rmse,
+            'MAE': mae,
+            'R2': r2
+        }
+
+        print(f"{model_type} 结果: MSE={mse:.6f}, RMSE={rmse:.6f}, MAE={mae:.6f}, R2={r2:.6f}")
+
+        return metrics
+
+    def run_comprehensive_comparison(self, lookback_days=30, epochs=100):
+        """运行全面的模型对比"""
+        print("开始运行综合模型对比实验...")
+
+        comparison_results = {}
+
+        # 1. 单一LSTM模型
+        comparison_results['单一LSTM'] = self.run_baseline_model('single_lstm', lookback_days, epochs)
+
+        # 2. EMD + LSTM
+        self.use_decomposition = True
+        self.decomposition_method = 'emd'
+        self.imfs = None  # 重置分解结果
+        comparison_results['EMD-LSTM'] = self.run_baseline_model('emd_lstm', lookback_days, epochs)
+
+        # 3. EEMD + LSTM
+        self.decomposition_method = 'eemd'
+        self.imfs = None
+        comparison_results['EEMD-LSTM'] = self.run_baseline_model('eemd_lstm', lookback_days, epochs)
+
+        # 4. CEEMDAN + LSTM
+        self.decomposition_method = 'ceemdan'
+        self.imfs = None
+        comparison_results['CEEMDAN-LSTM'] = self.run_baseline_model('ceemdan_lstm', lookback_days, epochs)
+
+        # 5. PSO + LSTM
+        self.use_decomposition = False
+        comparison_results['PSO-LSTM'] = self.run_baseline_model('pso_lstm', lookback_days, epochs)
+
+        # 6. CEEMDAN + PSO + LSTM (完整模型)
+        self.use_decomposition = True
+        self.decomposition_method = 'ceemdan'
+        self.imfs = None
+        self.best_params = None
+
+        print("\n正在运行完整的CEEMDAN-PSO-LSTM模型...")
+        # 应用分解
+        self.apply_decomposition()
+        # 优化参数
+        self.optimize_hyperparameters(lookback_days)
+        # 训练最终模型
+        X_test, y_test, _ = self.train_final_model(lookback_days, epochs)
+        # 评估
+        _, _, metrics = self.evaluate_model(X_test, y_test)
+        comparison_results['CEEMDAN-PSO-LSTM'] = metrics
+
+        return comparison_results
+
+
 class CustomLoggingCallback(tf.keras.callbacks.Callback):
     def __init__(self, log_interval=10):
         super().__init__()
@@ -403,7 +525,7 @@ def comprehensive_comparison(file_path):
             predictor.apply_decomposition()
 
         # 优化参数
-        best_params = predictor.optimize_hyperparameters(30, 4, 4)
+        best_params = predictor.optimize_hyperparameters(30)
 
         # 训练模型
         X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
@@ -435,51 +557,65 @@ def comprehensive_comparison(file_path):
 
     return results
 
-
 # 主程序
-def main(file_path, use_decomposition=True, decomposition_method='ceemdan'):
+def main(file_path, run_comparison=True):
     # 创建预测器
     predictor = StockPredictor(
-        use_decomposition=use_decomposition,
-        decomposition_method=decomposition_method
+        use_decomposition=True,
+        decomposition_method='ceemdan'
     )
 
     # 1. 从CSV文件加载数据
     data = predictor.load_data_from_csv(file_path)
 
-    # 显示数据基本信息
-    print("\n数据基本信息:")
-    print(data[['开盘Open', '最高High', '最低Low', '收盘Close']].describe())
+    if run_comparison:
+        # 运行综合对比实验
+        results = predictor.run_comprehensive_comparison(lookback_days=30, epochs=100)
 
-    # 2. 应用信号分解（如果启用）
-    if use_decomposition:
+        # 打印对比结果
+        print("\n" + "=" * 80)
+        print("所有模型性能对比结果")
+        print("=" * 80)
+        print(f"{'模型':<20} {'MSE':<12} {'RMSE':<12} {'MAE':<12} {'R²':<12}")
+        print("-" * 80)
+
+        for model_name, metrics in results.items():
+            print(f"{model_name:<20} {metrics['MSE']:<12.6f} {metrics['RMSE']:<12.6f} "
+                  f"{metrics['MAE']:<12.6f} {metrics['R2']:<12.6f}")
+
+        return predictor, results, data
+    else:
+        # 只运行完整模型（原来的流程）
+        # 显示数据基本信息
+        print("\n数据基本信息:")
+        print(data[['开盘Open', '最高High', '最低Low', '收盘Close']].describe())
+
+        # 2. 应用信号分解
         predictor.apply_decomposition()
 
-    # 3. 使用PSO优化超参数
-    best_params = predictor.optimize_hyperparameters(30, 2, 2)
+        # 3. 使用PSO优化超参数
+        best_params = predictor.optimize_hyperparameters(30)
 
-    # 4. 使用优化后的参数训练最终模型
-    X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
+        # 4. 使用优化后的参数训练最终模型
+        X_test, y_test, history = predictor.train_final_model(lookback_days=30, epochs=100)
 
-    # 5. 评估模型
-    y_test_actual, y_pred_actual, metrics = predictor.evaluate_model(X_test, y_test)
+        # 5. 评估模型
+        y_test_actual, y_pred_actual, metrics = predictor.evaluate_model(X_test, y_test)
 
-    # 6. 可视化结果
-    test_dates = data.index[-len(y_test_actual):]
-    predictor.plot_comprehensive_results(y_test_actual, y_pred_actual, test_dates)
+        # 6. 可视化结果
+        test_dates = data.index[-len(y_test_actual):]
+        predictor.plot_comprehensive_results(y_test_actual, y_pred_actual, test_dates)
 
-    return predictor, metrics, data, best_params
+        return predictor, metrics, data, best_params
 
 
 if __name__ == "__main__":
     file_path = "../data/000902perf.csv"
 
-    # 方式1: 运行单个方法
-    predictor, metrics, data, best_params = main(
-        file_path,
-        use_decomposition=True,
-        decomposition_method='ceemdan'
-    )
+    # 运行综合对比实验
+    predictor, results, data = main(file_path, run_comparison=True)
 
-    # # 方式2: 运行综合比较（比较所有方法）
-    # results = comprehensive_comparison(file_path)
+    # 保存结果到CSV文件
+    results_df = pd.DataFrame(results).T
+    results_df.to_csv('model_comparison_results.csv', encoding='utf-8-sig')
+    print("\n对比结果已保存到 'model_comparison_results.csv'")

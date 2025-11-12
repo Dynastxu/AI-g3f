@@ -1,0 +1,55 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+ subgraph subGraph0["LSTM Cell"]
+        Concat["Concat"]
+        A["输入"]
+        H_prev["前一时刻隐藏状态 h<sub>t-1</sub>"]
+        ForgetGate["<b>遗忘门</b><br>f<sub>t</sub> = σ(W<sub>f</sub> · [h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>f</sub>)"]
+        InputGate["<b>输入门</b><br>i<sub>t</sub> = σ(W<sub>i</sub> · [h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>i</sub>)"]
+        OutputGate["<b>输出门</b><br>o<sub>t</sub> = σ(W<sub>o</sub> · [h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>o</sub>)"]
+        CandidateGate["<b>候选状态</b><br>C̃<sub>t</sub> = tanh(W<sub>C</sub> · [h<sub>t-1</sub>, x<sub>t</sub>] + b<sub>C</sub>)"]
+        Multiply1["Multiply1"]
+        Multiply2["Multiply2"]
+        Multiply3["Multiply3"]
+        C_prev["前一时刻细胞状态 C<sub>t-1</sub>"]
+        Add["Add"]
+        C_current["当前细胞状态 C<sub>t</sub>"]
+        Tanh["Tanh"]
+        H_current["当前隐藏状态 h<sub>t</sub>"]
+        C_next["下一时刻细胞状态 C<sub>t+1</sub>"]
+  end
+    A --> Concat
+    H_prev --> Concat
+    Concat --> ForgetGate & InputGate & OutputGate & CandidateGate
+    ForgetGate -- f<sub>t</sub> --> Multiply1
+    InputGate -- i<sub>t</sub> --> Multiply2
+    CandidateGate -- C̃<sub>t</sub> --> Multiply2
+    OutputGate -- o<sub>t</sub> --> Multiply3
+    C_prev --> Multiply1
+    Multiply1 -- "f<sub>t</sub> * C<sub>t-1</sub>" --> Add
+    Multiply2 -- i<sub>t</sub> * C̃<sub>t</sub> --> Add
+    Add --> C_current
+    C_current --> Tanh & C_next
+    Tanh -- tanh(C<sub>t</sub>) --> Multiply3
+    Multiply3 --> H_current
+     Concat:::operation
+     H_prev:::state
+     ForgetGate:::gate
+     InputGate:::gate
+     OutputGate:::gate
+     CandidateGate:::gate
+     Multiply1:::operation
+     Multiply2:::operation
+     Multiply3:::operation
+     C_prev:::state
+     Add:::operation
+     C_current:::state
+     Tanh:::operation
+     H_current:::state
+     C_next:::state
+    classDef gate fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef operation fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef state fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
