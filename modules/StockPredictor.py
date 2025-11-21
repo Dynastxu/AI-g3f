@@ -1,13 +1,15 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+import datetime
 import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 from modules.PSOOptimizer import PSOOptimizer
 from modules.SignalDecomposer import SignalDecomposer  # 新增导入
@@ -620,6 +622,7 @@ if __name__ == "__main__":
     predictor, results, data = main(file_path, run_comparison=True)
 
     # 保存结果到CSV文件
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     results_df = pd.DataFrame(results).T
-    results_df.to_csv('model_comparison_results.csv', encoding='utf-8-sig')
-    print("\n对比结果已保存到 'model_comparison_results.csv'")
+    results_df.to_csv(f'../output/model_comparison_results_{timestamp}.csv', encoding='utf-8-sig')
+    print(f"\n对比结果已保存到 '../output/model_comparison_results_{timestamp}.csv'")
