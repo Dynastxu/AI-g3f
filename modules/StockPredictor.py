@@ -23,6 +23,28 @@ np.random.seed(42)
 tf.random.set_seed(42)
 
 
+def build_lstm_model(params, lookback_days=60):
+    """根据参数构建LSTM模型"""
+    lstm_units1 = int(params[0])  # 第一层LSTM单元数
+    lstm_units2 = int(params[1])  # 第二层LSTM单元数
+    dropout_rate = params[2]  # Dropout率
+    learning_rate = params[3]  # 学习率
+
+    model = Sequential([
+        LSTM(lstm_units1, return_sequences=True, input_shape=(lookback_days, 1)),
+        Dropout(dropout_rate),
+        LSTM(lstm_units2, return_sequences=False),
+        Dropout(dropout_rate),
+        Dense(25),
+        Dense(1)
+    ])
+
+    optimizer = Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
+
+    return model
+
+
 class StockPredictor:
     def __init__(self, use_decomposition=False, decomposition_method='ceemdan'):
         self.data = None
@@ -117,34 +139,13 @@ class StockPredictor:
 
         return X_train, X_test, y_train, y_test
 
-    def build_lstm_model(self, params, lookback_days=60):
-        """根据参数构建LSTM模型"""
-        lstm_units1 = int(params[0])  # 第一层LSTM单元数
-        lstm_units2 = int(params[1])  # 第二层LSTM单元数
-        dropout_rate = params[2]  # Dropout率
-        learning_rate = params[3]  # 学习率
-
-        model = Sequential([
-            LSTM(lstm_units1, return_sequences=True, input_shape=(lookback_days, 1)),
-            Dropout(dropout_rate),
-            LSTM(lstm_units2, return_sequences=False),
-            Dropout(dropout_rate),
-            Dense(25),
-            Dense(1)
-        ])
-
-        optimizer = Adam(learning_rate=learning_rate)
-        model.compile(optimizer=optimizer, loss='mean_squared_error')
-
-        return model
-
     def objective_function(self, params):
         """PSO的目标函数 - 返回验证集上的损失"""
         lookback_days = 30  # 固定时间步长
 
         try:
             # 构建模型
-            model = self.build_lstm_model(params, lookback_days)
+            model = build_lstm_model(params, lookback_days)
 
             # 使用部分数据进行快速验证（为了PSO效率）
             quick_train_size = min(500, len(self.X_train_quick))
@@ -230,7 +231,7 @@ class StockPredictor:
         X_train, X_test, y_train, y_test = self.create_dataset(lookback_days)
 
         # 构建最终模型
-        self.model = self.build_lstm_model(self.best_params, lookback_days)
+        self.model = build_lstm_model(self.best_params, lookback_days)
 
         print("最终模型结构:")
         self.model.summary()
@@ -378,24 +379,24 @@ class StockPredictor:
         if model_type == 'single_lstm':
             # 单一LSTM，固定参数
             params = [50, 25, 0.2, 0.001]
-            model = self.build_lstm_model(params, lookback_days)
+            model = build_lstm_model(params, lookback_days)
         elif model_type == 'pso_lstm':
             # PSO优化的LSTM
             if self.best_params is None:
                 self.optimize_hyperparameters(lookback_days)
-            model = self.build_lstm_model(self.best_params, lookback_days)
+            model = build_lstm_model(self.best_params, lookback_days)
         elif model_type == 'emd_lstm':
             # EMD + LSTM
             params = [50, 25, 0.2, 0.001]
-            model = self.build_lstm_model(params, lookback_days)
+            model = build_lstm_model(params, lookback_days)
         elif model_type == 'eemd_lstm':
             # EEMD + LSTM
             params = [50, 25, 0.2, 0.001]
-            model = self.build_lstm_model(params, lookback_days)
+            model = build_lstm_model(params, lookback_days)
         elif model_type == 'ceemdan_lstm':
             # CEEMDAN + LSTM
             params = [50, 25, 0.2, 0.001]
-            model = self.build_lstm_model(params, lookback_days)
+            model = build_lstm_model(params, lookback_days)
 
         # 训练模型
         history = model.fit(
