@@ -1,4 +1,5 @@
 import datetime
+import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -622,7 +623,9 @@ if __name__ == "__main__":
     predictor, results, data = main(file_path, run_comparison=True)
 
     # 保存结果到CSV文件
+    output_dir = '../output'
+    os.makedirs(output_dir, exist_ok=True)  # 创建目录（如果不存在）
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     results_df = pd.DataFrame(results).T
-    results_df.to_csv(f'../output/model_comparison_results_{timestamp}.csv', encoding='utf-8-sig')
-    print(f"\n对比结果已保存到 '../output/model_comparison_results_{timestamp}.csv'")
+    results_df.to_csv(f'{output_dir}/model_comparison_results_{timestamp}.csv', encoding='utf-8-sig')
+    print(f"\n对比结果已保存到 '{output_dir}/model_comparison_results_{timestamp}.csv'")
