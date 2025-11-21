@@ -47,6 +47,10 @@ def build_lstm_model(params, lookback_days=60):
 
 class StockPredictor:
     def __init__(self, use_decomposition=False, decomposition_method='ceemdan'):
+        self.y_val_quick = None
+        self.y_train_quick = None
+        self.X_val_quick = None
+        self.X_train_quick = None
         self.data = None
         self.scaler = MinMaxScaler()
         self.model = None
