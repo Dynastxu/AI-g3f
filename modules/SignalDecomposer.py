@@ -1,4 +1,3 @@
-# EMD_Decomposer.py
 import numpy as np
 from PyEMD import EMD, EEMD, CEEMDAN
 import matplotlib.pyplot as plt

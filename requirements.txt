@@ -1,3 +1,4 @@
+rich
 scipy
 tensorflow
 scikit-learn
