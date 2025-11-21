@@ -2,10 +2,13 @@ import datetime
 import os
 import warnings
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # 忽略TensorFlow的日志信息
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from rich.progress import Progress
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.layers import LSTM, Dense, Dropout
@@ -444,49 +447,58 @@ class StockPredictor:
 
     def run_comprehensive_comparison(self, lookback_days=30, epochs=100):
         """运行全面的模型对比"""
-        print("开始运行综合模型对比实验...")
+        with Progress() as progress:
+            task = progress.add_task("正在进行综合模型对比实验", total=6)
+            def update_progress():
+                progress.update(task, advance=1)
 
-        comparison_results = {}
+            comparison_results = {}
 
-        # 1. 单一LSTM模型
-        comparison_results['单一LSTM'] = self.run_baseline_model('single_lstm', lookback_days, epochs)
+            # 1. 单一LSTM模型
+            comparison_results['单一LSTM'] = self.run_baseline_model('single_lstm', lookback_days, epochs)
+            update_progress()
 
-        # 2. EMD + LSTM
-        self.use_decomposition = True
-        self.decomposition_method = 'emd'
-        self.imfs = None  # 重置分解结果
-        comparison_results['EMD-LSTM'] = self.run_baseline_model('emd_lstm', lookback_days, epochs)
+            # 2. EMD + LSTM
+            self.use_decomposition = True
+            self.decomposition_method = 'emd'
+            self.imfs = None  # 重置分解结果
+            comparison_results['EMD-LSTM'] = self.run_baseline_model('emd_lstm', lookback_days, epochs)
+            update_progress()
 
-        # 3. EEMD + LSTM
-        self.decomposition_method = 'eemd'
-        self.imfs = None
-        comparison_results['EEMD-LSTM'] = self.run_baseline_model('eemd_lstm', lookback_days, epochs)
+            # 3. EEMD + LSTM
+            self.decomposition_method = 'eemd'
+            self.imfs = None
+            comparison_results['EEMD-LSTM'] = self.run_baseline_model('eemd_lstm', lookback_days, epochs)
+            update_progress()
 
-        # 4. CEEMDAN + LSTM
-        self.decomposition_method = 'ceemdan'
-        self.imfs = None
-        comparison_results['CEEMDAN-LSTM'] = self.run_baseline_model('ceemdan_lstm', lookback_days, epochs)
+            # 4. CEEMDAN + LSTM
+            self.decomposition_method = 'ceemdan'
+            self.imfs = None
+            comparison_results['CEEMDAN-LSTM'] = self.run_baseline_model('ceemdan_lstm', lookback_days, epochs)
+            update_progress()
 
-        # 5. PSO + LSTM
-        self.use_decomposition = False
-        comparison_results['PSO-LSTM'] = self.run_baseline_model('pso_lstm', lookback_days, epochs)
+            # 5. PSO + LSTM
+            self.use_decomposition = False
+            comparison_results['PSO-LSTM'] = self.run_baseline_model('pso_lstm', lookback_days, epochs)
+            update_progress()
 
-        # 6. CEEMDAN + PSO + LSTM (完整模型)
-        self.use_decomposition = True
-        self.decomposition_method = 'ceemdan'
-        self.imfs = None
-        self.best_params = None
+            # 6. CEEMDAN + PSO + LSTM (完整模型)
+            self.use_decomposition = True
+            self.decomposition_method = 'ceemdan'
+            self.imfs = None
+            self.best_params = None
 
-        print("\n正在运行完整的CEEMDAN-PSO-LSTM模型...")
-        # 应用分解
-        self.apply_decomposition()
-        # 优化参数
-        self.optimize_hyperparameters(lookback_days)
-        # 训练最终模型
-        X_test, y_test, _ = self.train_final_model(lookback_days, epochs)
-        # 评估
-        _, _, metrics = self.evaluate_model(X_test, y_test)
-        comparison_results['CEEMDAN-PSO-LSTM'] = metrics
+            print("\n正在运行完整的CEEMDAN-PSO-LSTM模型...")
+            # 应用分解
+            self.apply_decomposition()
+            # 优化参数
+            self.optimize_hyperparameters(lookback_days)
+            # 训练最终模型
+            X_test, y_test, _ = self.train_final_model(lookback_days, epochs)
+            # 评估
+            _, _, metrics = self.evaluate_model(X_test, y_test)
+            comparison_results['CEEMDAN-PSO-LSTM'] = metrics
+            update_progress()
 
         return comparison_results
 
